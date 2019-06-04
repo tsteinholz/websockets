@@ -3,10 +3,172 @@ Changelog
 
 .. currentmodule:: websockets
 
-5.1
+8.0
 ...
 
 *In development*
+
+.. warning::
+
+    **Version 8.0 drops compatibility with Python 3.4 and 3.5.**
+
+.. note::
+
+    **Version 8.0 changes the behavior of the ``max_queue`` parameter.**
+
+    If you were setting ``max_queue=0`` to make the queue of incoming messages
+    unbounded, change it to ``max_queue=None``.
+
+.. note::
+
+    **Version 8.0 adds the reason phrase to the return type of the low-level
+    API** :func:`~http.read_response` **.**
+
+Also:
+
+* :meth:`~protocol.WebSocketCommonProtocol.send`,
+  :meth:`~protocol.WebSocketCommonProtocol.ping`, and
+  :meth:`~protocol.WebSocketCommonProtocol.pong` support bytes-like types
+  :class:`bytearray` and :class:`memoryview` in addition to :class:`bytes`.
+
+* Added :exc:`~exceptions.ConnectionClosedOK` and
+  :exc:`~exceptions.ConnectionClosedError` subclasses of
+  :exc:`~exceptions.ConnectionClosed` to tell apart normal connection
+  termination from errors.
+
+* :func:`~client.connect()` handles redirects from the server during the
+  handshake.
+
+* Enabled readline in the interactive client.
+
+* Added type hints (:pep:`484`).
+
+* Added documentation for extensions.
+
+* Documented how to optimize memory usage.
+
+7.0
+...
+
+.. warning::
+
+    **Version 7.0 renames the** ``timeout`` **argument of**
+    :func:`~server.serve()` **and** :func:`~client.connect()` **to**
+    ``close_timeout`` **.**
+
+    This prevents confusion with ``ping_timeout``.
+
+    For backwards compatibility, ``timeout`` is still supported.
+
+.. warning::
+
+    **Version 7.0 changes how a server terminates connections when it's
+    closed with** :meth:`~websockets.server.WebSocketServer.close` **.**
+
+    Previously, connections handlers were canceled. Now, connections are
+    closed with close code 1001 (going away). From the perspective of the
+    connection handler, this is the same as if the remote endpoint was
+    disconnecting. This removes the need to prepare for
+    :exc:`~asyncio.CancelledError` in connection handlers.
+
+    You can restore the previous behavior by adding the following line at the
+    beginning of connection handlers::
+
+        def handler(websocket, path):
+            closed = asyncio.ensure_future(websocket.wait_closed())
+            closed.add_done_callback(lambda task: task.cancel())
+
+.. note::
+
+    **Version 7.0 changes how a** :meth:`~protocol.WebSocketCommonProtocol.ping`
+    **that hasn't received a pong yet behaves when the connection is closed.**
+
+    The ping — as in ``ping = await websocket.ping()`` — used to be canceled
+    when the connection is closed, so that ``await ping`` raised
+    :exc:`~asyncio.CancelledError`. Now ``await ping`` raises
+    :exc:`~exceptions.ConnectionClosed` like other public APIs.
+
+.. note::
+
+    **Version 7.0 raises a** :exc:`RuntimeError` **exception if two coroutines
+    call** :meth:`~protocol.WebSocketCommonProtocol.recv` **concurrently.**
+
+    Concurrent calls lead to non-deterministic behavior because there are no
+    guarantees about which coroutine will receive which message.
+
+Also:
+
+* websockets sends Ping frames at regular intervals and closes the connection
+  if it doesn't receive a matching Pong frame. See
+  :class:`~protocol.WebSocketCommonProtocol` for details.
+
+* Added ``process_request`` and ``select_subprotocol`` arguments to
+  :func:`~server.serve()` and :class:`~server.WebSocketServerProtocol` to
+  customize :meth:`~server.WebSocketServerProtocol.process_request` and
+  :meth:`~server.WebSocketServerProtocol.select_subprotocol` without
+  subclassing :class:`~server.WebSocketServerProtocol`.
+
+* Added support for sending fragmented messages.
+
+* Added the :meth:`~protocol.WebSocketCommonProtocol.wait_closed` method to
+  protocols.
+
+* Added an interactive client: ``python -m websockets <uri>``.
+
+* Changed the ``origins`` argument to represent the lack of an origin with
+  ``None`` rather than ``''``.
+
+* Fixed a data loss bug in :meth:`~protocol.WebSocketCommonProtocol.recv`:
+  canceling it at the wrong time could result in messages being dropped.
+
+* Improved handling of multiple HTTP headers with the same name.
+
+* Improved error messages when a required HTTP header is missing.
+
+6.0
+...
+
+.. warning::
+
+    **Version 6.0 introduces the** :class:`~http.Headers` **class for managing
+    HTTP headers and changes several public APIs:**
+
+    * :meth:`~server.WebSocketServerProtocol.process_request` now receives a
+      :class:`~http.Headers` instead of a :class:`~http.client.HTTPMessage` in
+      the ``request_headers`` argument.
+
+    * The :attr:`~protocol.WebSocketCommonProtocol.request_headers` and
+      :attr:`~protocol.WebSocketCommonProtocol.response_headers` attributes of
+      :class:`~protocol.WebSocketCommonProtocol` are :class:`~http.Headers`
+      instead of :class:`~http.client.HTTPMessage`.
+
+    * The :attr:`~protocol.WebSocketCommonProtocol.raw_request_headers` and
+      :attr:`~protocol.WebSocketCommonProtocol.raw_response_headers`
+      attributes of :class:`~protocol.WebSocketCommonProtocol` are removed.
+      Use :meth:`~http.Headers.raw_items` instead.
+
+    * Functions defined in the :mod:`~handshake` module now receive
+      :class:`~http.Headers` in argument instead of ``get_header`` or
+      ``set_header`` functions. This affects libraries that rely on
+      low-level APIs.
+
+    * Functions defined in the :mod:`~http` module now return HTTP headers as
+      :class:`~http.Headers` instead of lists of ``(name, value)`` pairs.
+
+    Since :class:`~http.Headers` and :class:`~http.client.HTTPMessage` provide
+    similar APIs, this change won't affect most of the code dealing with HTTP
+    headers.
+
+
+Also:
+
+* Added compatibility with Python 3.7.
+
+5.0.1
+.....
+
+* Fixed a regression in the 5.0 release that broke some invocations of
+  :func:`~server.serve()` and :func:`~client.connect()`.
 
 5.0
 ...
@@ -17,9 +179,11 @@ Changelog
 
     websockets 4.0 was vulnerable to denial of service by memory exhaustion
     because it didn't enforce ``max_size`` when decompressing compressed
-    messages.
+    messages (`CVE-2018-1000518`_).
 
-.. warning::
+    .. _CVE-2018-1000518: https://nvd.nist.gov/vuln/detail/CVE-2018-1000518
+
+.. note::
 
     **Version 5.0 adds a** ``user_info`` **field to the return value of**
     :func:`~uri.parse_uri` **and** :class:`~uri.WebSocketURI` **.**
@@ -33,7 +197,7 @@ Also:
   credentials.
 
 * Iterating on incoming messages no longer raises an exception when the
-  connection terminates with code 1001 (going away).
+  connection terminates with close code 1001 (going away).
 
 * A plain HTTP request now receives a 426 Upgrade Required response and
   doesn't log a stack trace.
@@ -41,10 +205,11 @@ Also:
 * :func:`~server.unix_serve` can be used as an asynchronous context manager on
   Python ≥ 3.5.1.
 
-* Added :meth:`~protocol.WebSocketCommonProtocol.closed` property.
+* Added the :attr:`~protocol.WebSocketCommonProtocol.closed` property to
+  protocols.
 
 * If a :meth:`~protocol.WebSocketCommonProtocol.ping` doesn't receive a pong,
-  it's cancelled when the connection is closed.
+  it's canceled when the connection is closed.
 
 * Reported the cause of :exc:`~exceptions.ConnectionClosed` exceptions.
 
@@ -67,6 +232,11 @@ Also:
 
 * Prevented processing of incoming frames after failing the connection.
 
+4.0.1
+.....
+
+* Fixed issues with the packaging of the 4.0 release.
+
 4.0
 ...
 
@@ -83,6 +253,10 @@ Also:
 
 .. warning::
 
+    **Version 4.0 drops compatibility with Python 3.3.**
+
+.. note::
+
     **Version 4.0 removes the** ``state_name`` **attribute of protocols.**
 
     Use ``protocol.state.name`` instead of ``protocol.state_name``.
@@ -94,7 +268,8 @@ Also:
 
 * Added :func:`~server.unix_serve` for listening on Unix sockets.
 
-* Added the :attr:`~server.WebSocketServer.sockets` attribute.
+* Added the :attr:`~server.WebSocketServer.sockets` attribute to the return
+  value of :func:`~server.serve`.
 
 * Reorganized and extended documentation.
 
@@ -126,7 +301,7 @@ Also:
 
 * Rewrote HTTP handling for simplicity and performance.
 
-* Added an optional C extension to speed up low level operations.
+* Added an optional C extension to speed up low-level operations.
 
 * An invalid response status code during :func:`~client.connect()` now raises
   :class:`~exceptions.InvalidStatusCode` with a ``code`` attribute.
@@ -136,6 +311,8 @@ Also:
 
 3.3
 ...
+
+* Ensured compatibility with Python 3.6.
 
 * Reduced noise in logs caused by connection resets.
 
@@ -203,7 +380,7 @@ Also:
 
 * Worked around an asyncio bug affecting connection termination under load.
 
-* Made ``state_name`` atttribute on protocols a public API.
+* Made ``state_name`` attribute on protocols a public API.
 
 * Improved documentation.
 
@@ -237,7 +414,7 @@ Also:
 * Returned a 403 status code instead of 400 when the request Origin isn't
   allowed.
 
-* Cancelling :meth:`~protocol.WebSocketCommonProtocol.recv` no longer drops
+* Canceling :meth:`~protocol.WebSocketCommonProtocol.recv` no longer drops
   the next message.
 
 * Clarified that the closing handshake can be initiated by the client.

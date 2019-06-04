@@ -1,5 +1,6 @@
-WebSockets
-==========
+.. image:: logo/horizontal.svg
+   :width: 480px
+   :alt: websockets
 
 |rtd| |pypi-v| |pypi-pyversions| |pypi-l| |pypi-wheel| |circleci| |codecov|
 
@@ -36,7 +37,7 @@ Python with a focus on correctness and simplicity.
 Built on top of ``asyncio``, Python's standard asynchronous I/O framework, it
 provides an elegant coroutine-based API.
 
-Here's a client that says "Hello world!":
+Here's how a client sends and receives messages:
 
 .. copy-pasted because GitHub doesn't support the include directive
 
@@ -50,11 +51,12 @@ Here's a client that says "Hello world!":
     async def hello(uri):
         async with websockets.connect(uri) as websocket:
             await websocket.send("Hello world!")
+            await websocket.recv()
 
     asyncio.get_event_loop().run_until_complete(
         hello('ws://localhost:8765'))
 
-And here's an echo server (for Python ≥ 3.6):
+And here's an echo server:
 
 .. code:: python
 
@@ -71,9 +73,11 @@ And here's an echo server (for Python ≥ 3.6):
         websockets.serve(echo, 'localhost', 8765))
     asyncio.get_event_loop().run_forever()
 
-Does that look good? `Start here`_.
+Does that look good?
 
-.. _Start here: https://websockets.readthedocs.io/en/stable/intro.html
+`Start here!`_
+
+.. _Start here!: https://websockets.readthedocs.io/en/stable/intro.html
 
 Why should I use ``websockets``?
 --------------------------------
@@ -99,16 +103,9 @@ The development of ``websockets`` is shaped by four principles:
 Documentation is a first class concern in the project. Head over to `Read the
 Docs`_ and see for yourself.
 
-Professional support is available if you — or your company — are so inclined.
-`Get in touch`_.
-
-(If you contribute to ``websockets`` and would like to become an official
-support provider, let me know.)
-
 .. _Read the Docs: https://websockets.readthedocs.io/
 .. _handle backpressure correctly: https://vorpus.org/blog/some-thoughts-on-asynchronous-api-design-in-a-post-asyncawait-world/#websocket-servers
 .. _Autobahn Testsuite: https://github.com/aaugustin/websockets/blob/master/compliance/README.rst
-.. _Get in touch: https://fractalideas.com/
 
 Why shouldn't I use ``websockets``?
 -----------------------------------
@@ -121,17 +118,41 @@ Why shouldn't I use ``websockets``?
   and :rfc:`7692`: Compression Extensions for WebSocket. Its support for HTTP
   is minimal — just enough for a HTTP health check.
 * If you want to use Python 2: ``websockets`` builds upon ``asyncio`` which
-  only works on Python 3. ``websockets`` requires Python ≥ 3.4.
+  only works on Python 3. ``websockets`` requires Python ≥ 3.6.
+
+
+*Professionally supported websockets is now available*
+------------------------------------------------------
+
+*Tidelift gives software development teams a single source for purchasing and
+maintaining their software, with professional grade assurances from the
+experts who know it best, while seamlessly integrating with existing tools.*
+
+`Get supported websockets with the Tidelift subscription
+<https://tidelift.com/>`_
+
+(If you contribute to ``websockets`` and would like to become an official
+support provider, `let me know <https://fractalideas.com/>`_.)
 
 What else?
 ----------
 
-Bug reports, patches and suggestions welcome! Just open an issue_ or send a
-`pull request`_.
+Bug reports, patches and suggestions are welcome!
+
+To report a security vulnerability, please use the `Tidelift security
+contact`_. Tidelift will coordinate the fix and disclosure.
+
+.. _Tidelift security contact: https://tidelift.com/security
+
+For anything else, please open an issue_ or send a `pull request`_.
 
 .. _issue: https://github.com/aaugustin/websockets/issues/new
 .. _pull request: https://github.com/aaugustin/websockets/compare/
 
+Participants must uphold the `Contributor Covenant code of conduct`_.
+
+.. _Contributor Covenant code of conduct: https://github.com/aaugustin/websockets/blob/master/CODE_OF_CONDUCT.md
+
 ``websockets`` is released under the `BSD license`_.
 
-.. _BSD license: https://websockets.readthedocs.io/en/stable/license.html
+.. _BSD license: https://github.com/aaugustin/websockets/blob/master/LICENSE

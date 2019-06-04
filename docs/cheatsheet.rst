@@ -6,21 +6,29 @@ Cheat sheet
 Server
 ------
 
-* Write a coroutine that handles a single connection. It receives a websocket
+* Write a coroutine that handles a single connection. It receives a WebSocket
   protocol instance and the URI path in argument.
 
   * Call :meth:`~protocol.WebSocketCommonProtocol.recv` and
     :meth:`~protocol.WebSocketCommonProtocol.send` to receive and send
     messages at any time.
 
+  * When :meth:`~protocol.WebSocketCommonProtocol.recv` or
+    :meth:`~protocol.WebSocketCommonProtocol.send` raises
+    :exc:`~exceptions.ConnectionClosed`, clean up and exit. If you started
+    other :class:`asyncio.Task`, terminate them before exiting.
+
+  * If you aren't awaiting :meth:`~protocol.WebSocketCommonProtocol.recv`,
+    consider awaiting :meth:`~protocol.WebSocketCommonProtocol.wait_closed`
+    to detect quickly when the connection is closed.
+
   * You may :meth:`~protocol.WebSocketCommonProtocol.ping` or
     :meth:`~protocol.WebSocketCommonProtocol.pong` if you wish but it isn't
     needed in general.
 
 * Create a server with :func:`~server.serve` which is similar to asyncio's
-  :meth:`~asyncio.AbstractEventLoop.create_server`.
-
-  * On Python ≥ 3.5.1, you can also use it as an asynchronous context manager.
+  :meth:`~asyncio.AbstractEventLoop.create_server`. You can also use it as an
+  asynchronous context manager.
 
   * The server takes care of establishing connections, then lets the handler
     execute the application logic, and finally closes the connection after the
@@ -34,9 +42,8 @@ Client
 ------
 
 * Create a client with :func:`~client.connect` which is similar to asyncio's
-  :meth:`~asyncio.BaseEventLoop.create_connection`.
-
-  * On Python ≥ 3.5.1, you can also use it as an asynchronous context manager.
+  :meth:`~asyncio.BaseEventLoop.create_connection`. You can also use it as an
+  asynchronous context manager.
 
   * For advanced customization, you may subclass
     :class:`~server.WebSocketClientProtocol` and pass either this subclass or
@@ -76,28 +83,6 @@ in particular. Fortunately Python's official documentation provides advice to
 
 .. _develop with asyncio: https://docs.python.org/3/library/asyncio-dev.html
 
-Keeping connections open
-------------------------
-
-Pinging the other side once in a while is a good way to check whether the
-connection is still working, and also to keep it open in case something kills
-idle connections after some time::
-
-    while True:
-        try:
-            msg = await asyncio.wait_for(ws.recv(), timeout=20)
-        except asyncio.TimeoutError:
-            # No data in 20 seconds, check the connection.
-            try:
-                pong_waiter = await ws.ping()
-                await asyncio.wait_for(pong_waiter, timeout=10)
-            except asyncio.TimeoutError:
-                # No response to ping in 10 seconds, disconnect.
-                break
-        else:
-            # do something with msg
-            ...
-
 Passing additional arguments to the connection handler
 ------------------------------------------------------
 
@@ -117,6 +102,6 @@ connection handler, you can bind them with :func:`functools.partial`::
     asyncio.get_event_loop().run_until_complete(start_server)
     asyncio.get_event_loop().run_forever()
 
-Another way to achieve this result is to define the ``handler`` corountine in
+Another way to achieve this result is to define the ``handler`` coroutine in
 a scope where the ``extra_argument`` variable exists instead of injecting it
 through an argument.

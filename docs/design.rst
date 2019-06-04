@@ -70,14 +70,20 @@ two tasks:
 - :attr:`~protocol.WebSocketCommonProtocol.transfer_data_task` runs
   :meth:`~protocol.WebSocketCommonProtocol.transfer_data()` which handles
   incoming data and lets :meth:`~protocol.WebSocketCommonProtocol.recv()`
-  consume it. It may be cancelled to terminate the connection. It never exits
+  consume it. It may be canceled to terminate the connection. It never exits
   with an exception other than :exc:`~asyncio.CancelledError`. See :ref:`data
   transfer <data-transfer>` below.
+
+- :attr:`~protocol.WebSocketCommonProtocol.keepalive_ping_task` runs
+  :meth:`~protocol.WebSocketCommonProtocol.keepalive_ping()` which sends Ping
+  frames at regular intervals and ensures that corresponding Pong frames are
+  received. It is canceled when the connection terminates. It never exits
+  with an exception other than :exc:`~asyncio.CancelledError`.
 
 - :attr:`~protocol.WebSocketCommonProtocol.close_connection_task` runs
   :meth:`~protocol.WebSocketCommonProtocol.close_connection()` which waits for
   the data transfer to terminate, then takes care of closing the TCP
-  connection. It must not be cancelled. It never exits with an exception. See
+  connection. It must not be canceled. It never exits with an exception. See
   :ref:`connection termination <connection-termination>` below.
 
 Besides, :meth:`~protocol.WebSocketCommonProtocol.fail_connection()` starts
@@ -113,7 +119,7 @@ passing the protocol to the ``ws_handler`` coroutine handling the connection.
 
 While the opening handshake is asymmetrical — the client sends an HTTP Upgrade
 request and the server replies with an HTTP Switching Protocols response —
-``websockets`` aims at keepping the implementation of both sides consistent
+``websockets`` aims at keeping the implementation of both sides consistent
 with one another.
 
 On the client side, :meth:`~client.WebSocketClientProtocol.handshake()`:
@@ -132,7 +138,7 @@ On the server side, :meth:`~server.WebSocketServerProtocol.handshake()`:
 - calls :meth:`~server.WebSocketServerProtocol.process_request()` which may
   abort the WebSocket handshake and return a HTTP response instead; this
   hook only makes sense on the server side;
-- checks the HTTP request, negociates ``extensions`` and ``subprotocol``, and
+- checks the HTTP request, negotiates ``extensions`` and ``subprotocol``, and
   configures the protocol accordingly;
 - builds a HTTP response based on the above and parameters passed to
   :meth:`~server.serve()`;
@@ -140,8 +146,8 @@ On the server side, :meth:`~server.WebSocketServerProtocol.handshake()`:
 - moves to the ``OPEN`` state;
 - returns the ``path`` part of the ``uri``.
 
-The most significant assymetry between the two sides of the opening handshake
-lies in the negociation of extensions and, to a lesser extent, of the
+The most significant asymmetry between the two sides of the opening handshake
+lies in the negotiation of extensions and, to a lesser extent, of the
 subprotocol. The server knows everything about both sides and decides what the
 parameters should be for the connection. The client merely applies them.
 
@@ -213,7 +219,7 @@ messages in the :attr:`~protocol.WebSocketCommonProtocol.messages` queue.
 When it encounters a control frame:
 
 - if it's a close frame, it starts the closing handshake;
-- if it's a ping frame, it anwsers with a pong frame;
+- if it's a ping frame, it answers with a pong frame;
 - if it's a pong frame, it acknowledges the corresponding ping (unless it's an
   unsolicited pong).
 
@@ -265,11 +271,12 @@ state and sends a close frame. When the other side sends a close frame,
 ``CLOSING`` state and returns ``None``, also causing
 :attr:`~protocol.WebSocketCommonProtocol.transfer_data_task` to terminate.
 
-If the other side doesn't send a close frame within the connection's timeout,
-``websockets`` :ref:`fails the connection <connection-failure>`.
+If the other side doesn't send a close frame within the connection's close
+timeout, ``websockets`` :ref:`fails the connection <connection-failure>`.
 
-The closing handshake can take up to ``2 * timeout``: one ``timeout`` to write
-a close frame and one ``timeout`` to receive a close frame.
+The closing handshake can take up to ``2 * close_timeout``: one
+``close_timeout`` to write a close frame and one ``close_timeout`` to receive
+a close frame.
 
 Then ``websockets`` terminates the TCP connection.
 
@@ -293,22 +300,27 @@ which may happen as a result of:
   :attr:`~protocol.WebSocketCommonProtocol.transfer_data_task`;
 - a protocol error, including connection errors: depending on the exception,
   :attr:`~protocol.WebSocketCommonProtocol.transfer_data_task` :ref:`fails the
-  connection <connection-failure>`_ with a suitable code and exits.
+  connection <connection-failure>` with a suitable code and exits.
 
 :attr:`~protocol.WebSocketCommonProtocol.close_connection_task` is separate
 from :attr:`~protocol.WebSocketCommonProtocol.transfer_data_task` to make it
-easier to implement the timeout on the closing handshake. Cancelling
+easier to implement the timeout on the closing handshake. Canceling
 :attr:`~protocol.WebSocketCommonProtocol.transfer_data_task` creates no risk
-of cancelling :attr:`~protocol.WebSocketCommonProtocol.close_connection_task`
+of canceling :attr:`~protocol.WebSocketCommonProtocol.close_connection_task`
 and failing to close the TCP connection, thus leaking resources.
 
-Terminating the TCP connection can take up to ``2 * timeout`` on the server
-side and ``3 * timeout`` on the client side. Clients start by waiting for the
-server to close the connection, hence the extra ``timeout``. Then both sides
-go through the following steps until the TCP connection is lost: half-closing
-the connection (only for non-TLS connections), closing the connection,
-aborting the connection. At this point the connection drops regardless of what
-happens on the network.
+Then :attr:`~protocol.WebSocketCommonProtocol.close_connection_task` cancels
+:attr:`~protocol.WebSocketCommonProtocol.keepalive_ping`. This task has no
+protocol compliance responsibilities. Terminating it to avoid leaking it is
+the only concern.
+
+Terminating the TCP connection can take up to ``2 * close_timeout`` on the
+server side and ``3 * close_timeout`` on the client side. Clients start by
+waiting for the server to close the connection, hence the extra
+``close_timeout``. Then both sides go through the following steps until the
+TCP connection is lost: half-closing the connection (only for non-TLS
+connections), closing the connection, aborting the connection. At this point
+the connection drops regardless of what happens on the network.
 
 
 .. _connection-failure:
@@ -320,7 +332,7 @@ If the opening handshake doesn't complete successfully, ``websockets`` fails
 the connection by closing the TCP connection.
 
 Once the opening handshake has completed, ``websockets`` fails the connection
-by cancelling :attr:`~protocol.WebSocketCommonProtocol.transfer_data_task` and
+by canceling :attr:`~protocol.WebSocketCommonProtocol.transfer_data_task` and
 sending a close frame if appropriate.
 
 :attr:`~protocol.WebSocketCommonProtocol.transfer_data_task` exits, unblocking
@@ -328,22 +340,82 @@ sending a close frame if appropriate.
 the TCP connection.
 
 
+.. _server-shutdown:
+
+Server shutdown
+---------------
+
+:class:`~websockets.server.WebSocketServer` closes asynchronously like
+:class:`asyncio.Server`. The shutdown happen in two steps:
+
+1. Stop listening and accepting new connections;
+2. Close established connections with close code 1001 (going away) or, if
+   the opening handshake is still in progress, with HTTP status code 503
+   (Service Unavailable).
+
+The first call to :class:`~websockets.server.WebSocketServer.close` starts a
+task that performs this sequence. Further calls are ignored. This is the
+easiest way to make :class:`~websockets.server.WebSocketServer.close` and
+:class:`~websockets.server.WebSocketServer.wait_closed` idempotent.
+
+
 .. _cancellation:
 
 Cancellation
 ------------
 
+User code
+.........
+
+``websockets`` provides a WebSocket application server. It manages connections
+and passes them to user-provided connection handlers. This is an *inversion of
+control* scenario: library code calls user code.
+
+If a connection drops, the corresponding handler should terminate. If the
+server shuts down, all connection handlers must terminate. Canceling
+connection handlers would terminate them.
+
+However, using cancellation for this purpose would require all connection
+handlers to handle it properly. For example, if a connection handler starts
+some tasks, it should catch :exc:`~asyncio.CancelledError`, terminate or
+cancel these tasks, and then re-raise the exception.
+
+Cancellation is tricky in :mod:`asyncio` applications, especially when it
+interacts with finalization logic. In the example above, what if a handler
+gets interrupted with :exc:`~asyncio.CancelledError` while it's finalizing
+the tasks it started, after detecting that the connection dropped?
+
+``websockets`` considers that cancellation may only be triggered by the caller
+of a coroutine when it doesn't care about the results of that coroutine
+anymore. (Source: `Guido van Rossum <https://groups.google.com/forum/#!msg
+/python-tulip/LZQe38CR3bg/7qZ1p_q5yycJ>`_). Since connection handlers run
+arbitrary user code, ``websockets`` has no way of deciding whether that code
+is still doing something worth caring about.
+
+For these reasons, ``websockets`` never cancels connection handlers. Instead
+it expects them to detect when the connection is closed, execute finalization
+logic if needed, and exit.
+
+Conversely, cancellation isn't a concern for WebSocket clients because they
+don't involve inversion of control.
+
+Library
+.......
+
 Most :doc:`public APIs <api>` of ``websockets`` are coroutines. They may be
-cancelled. ``websockets`` must handle this situation.
+canceled, for example if the user starts a task that calls these coroutines
+and cancels the task later. ``websockets`` must handle this situation.
 
 Cancellation during the opening handshake is handled like any other exception:
-the TCP connection is closed and the exception is re-raised or logged.
+the TCP connection is closed and the exception is re-raised. This can only
+happen on the client side. On the server side, the opening handshake is
+managed by ``websockets`` and nothing results in a cancellation.
 
-Once the WebSocket connection is established,
+Once the WebSocket connection is established, internal tasks
 :attr:`~protocol.WebSocketCommonProtocol.transfer_data_task` and
 :attr:`~protocol.WebSocketCommonProtocol.close_connection_task` mustn't get
-accidentally cancelled if a coroutine that awaits them is cancelled. They must
-be shielded from cancellation.
+accidentally canceled if a coroutine that awaits them is canceled. In other
+words, they must be shielded from cancellation.
 
 :meth:`~protocol.WebSocketCommonProtocol.recv()` waits for the next message in
 the queue or for :attr:`~protocol.WebSocketCommonProtocol.transfer_data_task`
@@ -360,22 +432,23 @@ on the transfer data task, it doesn't propagate cancellation to that task.
 prevent cancellation.
 
 :meth:`~protocol.WebSocketCommonProtocol.close()` waits for the data transfer
-task to terminate with :func:`~asyncio.wait_for`. If it's cancelled or if the
-timout elapses, :attr:`~protocol.WebSocketCommonProtocol.transfer_data_task`
-is cancelled. :attr:`~protocol.WebSocketCommonProtocol.transfer_data_task` is
-expected to catch the cancellation and terminate properly. This is the only
-point where it may be cancelled.
-
+task to terminate with :func:`~asyncio.wait_for`. If it's canceled or if the
+timeout elapses, :attr:`~protocol.WebSocketCommonProtocol.transfer_data_task`
+is canceled, which is correct at this point.
 :meth:`~protocol.WebSocketCommonProtocol.close()` then waits for
 :attr:`~protocol.WebSocketCommonProtocol.close_connection_task` but shields it
 to prevent cancellation.
 
-:attr:`~protocol.WebSocketCommonProtocol.close_connnection_task` starts by
-waiting for :attr:`~protocol.WebSocketCommonProtocol.transfer_data_task`.
-Since :attr:`~protocol.WebSocketCommonProtocol.transfer_data_task` handles
-:exc:`~asyncio.CancelledError`, cancellation doesn't propagate to
-:attr:`~protocol.WebSocketCommonProtocol.close_connnection_task`.
+:meth:`~protocol.WebSocketCommonProtocol.close()` and
+:func:`~protocol.WebSocketCommonProtocol.fail_connection()` are the only
+places where :attr:`~protocol.WebSocketCommonProtocol.transfer_data_task` may
+be canceled.
 
+:attr:`~protocol.WebSocketCommonProtocol.close_connnection_task` starts by
+waiting for :attr:`~protocol.WebSocketCommonProtocol.transfer_data_task`. It
+catches :exc:`~asyncio.CancelledError` to prevent a cancellation of
+:attr:`~protocol.WebSocketCommonProtocol.transfer_data_task` from propagating
+to :attr:`~protocol.WebSocketCommonProtocol.close_connnection_task`.
 
 .. _backpressure:
 
@@ -393,7 +466,7 @@ accumulates in buffers, eventually causing the server to run out of memory and
 crash.
 
 The solution to this problem is backpressure. Any part of the server that
-receives inputs faster than it can it can process them and send the outputs
+receives inputs faster than it can process them and send the outputs
 must propagate that information back to the previous part in the chain.
 
 ``websockets`` is designed to make it easy to get backpressure right.
@@ -401,7 +474,7 @@ must propagate that information back to the previous part in the chain.
 For incoming data, ``websockets`` builds upon :class:`~asyncio.StreamReader`
 which propagates backpressure to its own buffer and to the TCP stream. Frames
 are parsed from the input stream and added to a bounded queue. If the queue
-fills up, parsing halts until some the application reads a frame.
+fills up, parsing halts until the application reads a frame.
 
 For outgoing data, ``websockets`` builds upon :class:`~asyncio.StreamWriter`
 which implements flow control. If the output buffers grow too large, it waits
@@ -440,21 +513,21 @@ Bufferbloat can happen at every level in the stack where there is a buffer.
 For each connection, the receiving side contains these buffers:
 
 - OS buffers: tuning them is an advanced optimization.
-- :class:`~asyncio.StreamReader` bytes buffer: the default limit is 64kB.
+- :class:`~asyncio.StreamReader` bytes buffer: the default limit is 64 KiB.
   You can set another limit by passing a ``read_limit`` keyword argument to
   :func:`~client.connect()` or :func:`~server.serve()`.
-- Incoming messages :class:`~asyncio.queues.Queue`: its size depends both on
+- Incoming messages :class:`~collections.deque`: its size depends both on
   the size and the number of messages it contains. By default the maximum
-  UTF-8 encoded size is 1MB and the maximum number is 32. In the worst case,
-  after UTF-8 decoding, a single message could take up to 4MB of memory and
-  the overall memory consumption could reach 128MB. You should adjust these
+  UTF-8 encoded size is 1 MiB and the maximum number is 32. In the worst case,
+  after UTF-8 decoding, a single message could take up to 4 MiB of memory and
+  the overall memory consumption could reach 128 MiB. You should adjust these
   limits by setting the ``max_size`` and ``max_queue`` keyword arguments of
   :func:`~client.connect()` or :func:`~server.serve()` according to your
   application's requirements.
 
 For each connection, the sending side contains these buffers:
 
-- :class:`~asyncio.StreamWriter` bytes buffer: the default size is 64kB.
+- :class:`~asyncio.StreamWriter` bytes buffer: the default size is 64 KiB.
   You can set another limit by passing a ``write_limit`` keyword argument to
   :func:`~client.connect()` or :func:`~server.serve()`.
 - OS buffers: tuning them is an advanced optimization.
@@ -472,11 +545,6 @@ including multiple calls to the same method.
 As shown above, receiving frames is independent from sending frames. That
 isolates :meth:`~protocol.WebSocketCommonProtocol.recv()`, which receives
 frames, from the other methods, which send frames.
-
-While :meth:`~protocol.WebSocketCommonProtocol.recv()` supports being called
-multiple times concurrently, this is unlikely to be useful: when multiple
-callers are waiting for the next message, exactly one of them will get it, but
-there is no guarantee about which one.
 
 Methods that send frames also support concurrent calls. While the connection
 is open, each frame is sent with a single write. Combined with the concurrency
